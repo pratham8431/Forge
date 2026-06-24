@@ -7,6 +7,7 @@ from alembic import context
 from app.core.config import settings
 from app.core.database import Base
 import app.iam.identity.models  # noqa — ensure models are registered
+import app.rag.models  # noqa — ensure RAG models are registered
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)

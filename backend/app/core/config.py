@@ -4,7 +4,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # App
-    APP_NAME: str = "Atlas IAM"
+    APP_NAME: str = "Forge"
     DEBUG: bool = False
     API_PREFIX: str = "/api/v1"
 
@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_LOGIN_WINDOW: int = 60   # seconds
     ACCOUNT_LOCK_ATTEMPTS: int = 5
     ACCOUNT_LOCK_DURATION: int = 900    # 15 minutes in seconds
+
+    # OpenAI
+    OPENAI_API_KEY: str = ""
+
+    # Gemini (image OCR)
+    GEMINI_API_KEY: str = ""
 
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"

@@ -8,6 +8,8 @@ from app.core.config import settings
 from app.core.database import engine, Base
 from app.core.redis import close_redis
 from app.iam.auth.router import router as auth_router
+from app.rag.router import router as rag_router
+import app.rag.models  # noqa — register RAG models with Base
 
 
 # ─── Security headers middleware ───────────────────────────────────────────────
@@ -57,6 +59,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router, prefix=settings.API_PREFIX)
+app.include_router(rag_router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health")
