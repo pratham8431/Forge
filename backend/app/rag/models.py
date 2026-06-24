@@ -18,7 +18,7 @@ class Document(Base):
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(50), default="processing")  # processing | ready | failed
-    metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    extra_data: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -34,7 +34,7 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float]] = mapped_column(Vector(RAGConfig.OPENAI_EMBEDDING_DIMS), nullable=False)
-    metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    extra_data: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped["Document"] = relationship("Document", back_populates="chunks")
