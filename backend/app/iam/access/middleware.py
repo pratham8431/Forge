@@ -1,20 +1,21 @@
 import uuid
+import logging
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.iam.auth.jwt import decode_access_token
-from app.iam.identity.models import User, Role
+from app.core.firebase import get_firebase_app
+from app.iam.identity.models import User
 
+logger = logging.getLogger(__name__)
 bearer_scheme = HTTPBearer()
 
 
 class CurrentUser:
     """Injected into route handlers via Depends — carries user + permission set."""
+
     def __init__(self, user: User, permissions: set[str], session_id: uuid.UUID):
         self.user = user
         self.permissions = permissions
@@ -22,6 +23,51 @@ class CurrentUser:
 
     def has_permission(self, perm: str) -> bool:
         return perm in self.permissions
+
+
+async def _get_or_create_user(
+    firebase_uid: str,
+    email: str,
+    full_name: str,
+    db: AsyncSession,
+) -> User:
+    # 1. Lookup by Firebase UID stored in oauth_id
+    result = await db.execute(
+        select(User).where(
+            User.oauth_id == firebase_uid,
+            User.oauth_provider == "firebase",
+            User.deleted_at.is_(None),
+        )
+    )
+    user = result.scalar_one_or_none()
+    if user:
+        return user
+
+    # 2. Lookup by email (links an existing account to Firebase)
+    result = await db.execute(
+        select(User).where(User.email == email, User.deleted_at.is_(None))
+    )
+    user = result.scalar_one_or_none()
+    if user:
+        user.oauth_id = firebase_uid
+        user.oauth_provider = "firebase"
+        user.is_verified = True
+        await db.flush()
+        return user
+
+    # 3. Create a new user record for this Firebase identity
+    user = User(
+        email=email,
+        full_name=full_name or email.split("@")[0],
+        password_hash=None,
+        is_active=True,
+        is_verified=True,
+        oauth_provider="firebase",
+        oauth_id=firebase_uid,
+    )
+    db.add(user)
+    await db.flush()
+    return user
 
 
 async def get_current_user(
@@ -33,24 +79,39 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    if get_firebase_app() is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service not configured — set FIREBASE_SERVICE_ACCOUNT",
+        )
+
+    # Verify the Firebase ID token
     try:
-        payload = decode_access_token(credentials.credentials)
-        user_id = uuid.UUID(payload["sub"])
-        session_id = uuid.UUID(payload.get("jti", str(uuid.uuid4())))
-        permissions: set[str] = set(payload.get("permissions", []))
-    except (JWTError, ValueError, KeyError):
+        from firebase_admin import auth as firebase_auth
+        decoded = firebase_auth.verify_id_token(credentials.credentials)
+        firebase_uid: str = decoded["uid"]
+        email: str = decoded.get("email", "")
+        full_name: str = decoded.get("name", "")
+    except Exception as exc:
+        logger.debug("Firebase token verification failed: %s", exc)
         raise credentials_exception
 
-    result = await db.execute(
-        select(User)
-        .options(selectinload(User.roles).selectinload(Role.permissions))
-        .where(User.id == user_id, User.deleted_at.is_(None), User.is_active == True)
-    )
-    user = result.scalar_one_or_none()
-    if not user:
+    # Find or provision a local user row
+    try:
+        user = await _get_or_create_user(firebase_uid, email, full_name, db)
+    except Exception as exc:
+        logger.error("User lookup/create failed: %s", exc)
         raise credentials_exception
 
-    return CurrentUser(user=user, permissions=permissions, session_id=session_id)
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+
+    # Base permissions: every Firebase user gets rag:search.
+    # Additional permissions can be stored as Firebase Custom Claims under "permissions".
+    permissions: set[str] = {"rag:search"} | set(decoded.get("permissions", []))
+
+    return CurrentUser(user=user, permissions=permissions, session_id=uuid.uuid4())
 
 
 def require_permission(permission: str):

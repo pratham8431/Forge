@@ -7,10 +7,17 @@ from fastapi import UploadFile, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.rag.models import Document, Conversation
-from app.rag.services.utils import extract_text_from_file, chunk_text_advanced, process_chunks_parallel
-from app.rag.services.openai_service import get_embeddings, get_query_embedding, generate_answer, answer_questions_parallel
-from app.rag.services.pgvector_service import store_chunks, similarity_search, similarity_search_global, format_results_for_rag, delete_document_chunks
 from app.rag.config import RAGConfig
+from app.rag.services.utils import extract_text_from_file, chunk_text_advanced, process_chunks_parallel
+if RAGConfig.LLM_PROVIDER == "ollama":
+    from app.rag.services.ollama_service import get_embeddings, get_query_embedding, generate_answer, answer_questions_parallel
+elif RAGConfig.LLM_PROVIDER == "claude":
+    from app.rag.services.claude_service import get_embeddings, get_query_embedding, generate_answer, answer_questions_parallel
+elif RAGConfig.LLM_PROVIDER == "gemini":
+    from app.rag.services.gemini_service import get_embeddings, get_query_embedding, generate_answer, answer_questions_parallel
+else:
+    from app.rag.services.openai_service import get_embeddings, get_query_embedding, generate_answer, answer_questions_parallel
+from app.rag.services.pgvector_service import store_chunks, similarity_search, similarity_search_global, format_results_for_rag, delete_document_chunks
 from app.workers.audit_tasks import log_audit_event
 
 logger = logging.getLogger(__name__)

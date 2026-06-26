@@ -33,7 +33,7 @@ class DocumentChunk(Base):
     document_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(Vector(RAGConfig.OPENAI_EMBEDDING_DIMS), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(Vector(RAGConfig.EMBEDDING_DIMS), nullable=False)
     extra_data: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

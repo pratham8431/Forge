@@ -1,90 +1,20 @@
-import uuid
-from fastapi import APIRouter, Depends, Request
-from sqlalchemy.ext.asyncio import AsyncSession
-from redis.asyncio import Redis
+"""
+Auth router — Firebase edition.
 
-from app.core.database import get_db
-from app.core.redis import get_redis
-from app.iam.auth.schemas import (
-    RegisterRequest, LoginRequest, RefreshRequest,
-    VerifyEmailRequest, ForgotPasswordRequest, ResetPasswordRequest,
-    TokenResponse, MessageResponse, SessionOut,
-)
-from app.iam.auth import service
+Registration, login, password reset, and email verification are now handled
+entirely by the Firebase client SDK on the frontend.  This router only exposes
+the small set of endpoints that still need a backend:
+
+  GET  /auth/me            — return current user's profile
+  POST /auth/logout-all    — revoke all Firebase refresh tokens (sign out everywhere)
+  GET  /auth/sessions      — stub that returns current session (Firebase has no list API)
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
 from app.iam.access.middleware import get_current_user, CurrentUser
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-
-@router.post("/register", response_model=MessageResponse, status_code=201)
-async def register(
-    data: RegisterRequest,
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis),
-):
-    return await service.register_user(data, db, redis)
-
-
-@router.post("/verify-email", response_model=MessageResponse)
-async def verify_email(
-    data: VerifyEmailRequest,
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis),
-):
-    return await service.verify_email(data.token, db, redis)
-
-
-@router.post("/login", response_model=TokenResponse)
-async def login(
-    data: LoginRequest,
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis),
-):
-    return await service.login_user(data, request, db, redis)
-
-
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh(
-    data: RefreshRequest,
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis),
-):
-    return await service.refresh_tokens(data.refresh_token, db, redis)
-
-
-@router.post("/logout", response_model=MessageResponse)
-async def logout(
-    current: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    return await service.logout_user(current.session_id, current.user.id, db)
-
-
-@router.post("/logout-all", response_model=MessageResponse)
-async def logout_all(
-    current: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    return await service.logout_all_sessions(current.user.id, db)
-
-
-@router.post("/forgot-password", response_model=MessageResponse)
-async def forgot_password(
-    data: ForgotPasswordRequest,
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis),
-):
-    return await service.forgot_password(data.email, db, redis)
-
-
-@router.post("/reset-password", response_model=MessageResponse)
-async def reset_password(
-    data: ResetPasswordRequest,
-    db: AsyncSession = Depends(get_db),
-    redis: Redis = Depends(get_redis),
-):
-    return await service.reset_password(data.token, data.new_password, db, redis)
 
 
 @router.get("/me")
@@ -99,18 +29,44 @@ async def get_me(current: CurrentUser = Depends(get_current_user)):
     }
 
 
-@router.get("/sessions", response_model=list[SessionOut])
-async def get_sessions(
-    current: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    return await service.get_user_sessions(current.user.id, db)
+@router.post("/logout-all")
+async def logout_all(current: CurrentUser = Depends(get_current_user)):
+    """Revoke all Firebase refresh tokens for this user (signs out all devices)."""
+    from app.core.firebase import get_firebase_app
+
+    if get_firebase_app() is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auth service not configured",
+        )
+
+    try:
+        from firebase_admin import auth as firebase_auth
+        firebase_auth.revoke_refresh_tokens(current.user.oauth_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to revoke sessions: {exc}",
+        )
+
+    return {"message": "All sessions revoked"}
 
 
-@router.delete("/sessions/{session_id}", response_model=MessageResponse)
-async def revoke_session(
-    session_id: uuid.UUID,
-    current: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    return await service.revoke_session(session_id, current.user.id, db)
+@router.get("/sessions")
+async def get_sessions(current: CurrentUser = Depends(get_current_user)):
+    """
+    Firebase manages sessions client-side; we return the caller's own session
+    as a single-element list so the UI has something to render.
+    """
+    from datetime import datetime, timezone, timedelta
+
+    return [
+        {
+            "id": str(current.session_id),
+            "device_name": "Current session",
+            "ip_address": None,
+            "last_used": datetime.now(timezone.utc).isoformat(),
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    ]

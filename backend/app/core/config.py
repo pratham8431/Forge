@@ -14,11 +14,14 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = "redis://redis:6379/0"
 
-    # JWT
-    JWT_SECRET: str
+    # JWT (kept for backward compat; not used for auth anymore)
+    JWT_SECRET: str = "unused"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+
+    # Firebase
+    FIREBASE_SERVICE_ACCOUNT: str = ""   # full service-account JSON as a single string
 
     # OAuth — Google
     GOOGLE_CLIENT_ID: str = ""
@@ -37,6 +40,20 @@ class Settings(BaseSettings):
     RATE_LIMIT_LOGIN_WINDOW: int = 60   # seconds
     ACCOUNT_LOCK_ATTEMPTS: int = 5
     ACCOUNT_LOCK_DURATION: int = 900    # 15 minutes in seconds
+
+    # LLM provider: "gemini" | "claude" | "ollama" | "openai"
+    LLM_PROVIDER: str = "gemini"
+
+    # Ollama (local)
+    OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
+    OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text"
+    OLLAMA_COMPLETION_MODEL: str = "qwen3:8b"
+
+    # Anthropic (Claude Haiku generation)
+    ANTHROPIC_API_KEY: str = ""
+
+    # Jina AI (embeddings)
+    JINA_API_KEY: str = ""
 
     # OpenAI
     OPENAI_API_KEY: str = ""

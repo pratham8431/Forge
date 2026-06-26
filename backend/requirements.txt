@@ -12,6 +12,7 @@ alembic==1.13.3
 # Auth
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+firebase-admin==6.5.0
 
 # Redis
 redis==5.1.0
@@ -39,9 +40,12 @@ pandas==2.2.3
 openpyxl==3.1.5
 Pillow==11.0.0
 
-# RAG — OpenAI
+# RAG — OpenAI / Jina
 openai==1.51.2
 tenacity==9.0.0
+
+# RAG — Anthropic (Claude Haiku generation)
+anthropic==0.40.0
 
 # RAG — Gemini (optional image OCR)
 google-generativeai==0.8.3
