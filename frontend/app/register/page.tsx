@@ -1,9 +1,12 @@
 "use client"
 
+export const dynamic = "force-dynamic"
+
 import { useState, FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { api } from "@/lib/api"
+import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth"
+import { auth } from "@/lib/firebase"
 
 function getPasswordStrength(password: string): { score: number; label: string } {
   if (password.length === 0) return { score: 0, label: "" }
@@ -36,11 +39,21 @@ export default function RegisterPage() {
     setLoading(true)
 
     try {
-      const data = await api.register(form.email, form.password, form.full_name)
-      setSuccess(data.message)
-      setTimeout(() => router.push("/login"), 2500)
+      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password)
+      await updateProfile(cred.user, { displayName: form.full_name })
+      setSuccess("Account created! Redirecting…")
+      setTimeout(() => router.push("/dashboard"), 1500)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Registration failed")
+      const code = (err as { code?: string }).code ?? ""
+      if (code === "auth/email-already-in-use") {
+        setError("An account with this email already exists.")
+      } else if (code === "auth/weak-password") {
+        setError("Password must be at least 6 characters.")
+      } else if (code === "auth/invalid-email") {
+        setError("Please enter a valid email address.")
+      } else {
+        setError(err instanceof Error ? err.message : "Registration failed")
+      }
     } finally {
       setLoading(false)
     }
@@ -50,14 +63,11 @@ export default function RegisterPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-black relative overflow-hidden">
-      {/* Background radial glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(10,132,255,0.15),transparent)] pointer-events-none" />
 
       <div className="relative w-full max-w-[400px] mx-auto px-4 animate-fade-in">
-        {/* Glass card */}
         <div className="bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] rounded-2xl p-10 shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_32px_80px_rgba(0,0,0,0.8)]">
 
-          {/* Logo */}
           <div className="flex items-center justify-center gap-2 mb-8">
             <span className="text-[#0A84FF] text-[28px] leading-none select-none">◆</span>
             <span className="text-white font-semibold text-[20px] tracking-tight">Forge</span>
@@ -72,9 +82,7 @@ export default function RegisterPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-[13px] font-medium text-white/60 mb-1.5">
-                Full name
-              </label>
+              <label className="block text-[13px] font-medium text-white/60 mb-1.5">Full name</label>
               <input
                 type="text"
                 required
@@ -86,9 +94,7 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-white/60 mb-1.5">
-                Email
-              </label>
+              <label className="block text-[13px] font-medium text-white/60 mb-1.5">Email</label>
               <input
                 type="email"
                 required
@@ -100,18 +106,15 @@ export default function RegisterPage() {
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-white/60 mb-1.5">
-                Password
-              </label>
+              <label className="block text-[13px] font-medium text-white/60 mb-1.5">Password</label>
               <input
                 type="password"
                 required
                 value={form.password}
                 onChange={(e) => update("password", e.target.value)}
-                placeholder="Min 8 chars, 1 uppercase, 1 number"
+                placeholder="Min 6 characters"
                 className="w-full bg-white/[0.06] text-white rounded-xl px-4 py-3 text-[15px] border border-white/[0.10] placeholder-white/25 focus:outline-none focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/20 transition-all duration-200"
               />
-              {/* Password strength indicator */}
               {form.password.length > 0 && (
                 <div className="mt-2.5">
                   <div className="flex gap-1">
@@ -119,19 +122,11 @@ export default function RegisterPage() {
                       <div
                         key={i}
                         className="h-1 flex-1 rounded-full transition-all duration-300"
-                        style={{
-                          backgroundColor:
-                            i <= strength.score
-                              ? STRENGTH_COLORS[strength.score]
-                              : "rgba(255,255,255,0.08)",
-                        }}
+                        style={{ backgroundColor: i <= strength.score ? STRENGTH_COLORS[strength.score] : "rgba(255,255,255,0.08)" }}
                       />
                     ))}
                   </div>
-                  <p
-                    className="text-[12px] mt-1.5 transition-colors duration-200"
-                    style={{ color: STRENGTH_COLORS[strength.score] }}
-                  >
+                  <p className="text-[12px] mt-1.5 transition-colors duration-200" style={{ color: STRENGTH_COLORS[strength.score] }}>
                     {strength.label}
                   </p>
                 </div>
@@ -170,9 +165,7 @@ export default function RegisterPage() {
                   </svg>
                   Creating account…
                 </>
-              ) : (
-                "Create account"
-              )}
+              ) : "Create account"}
             </button>
           </form>
 

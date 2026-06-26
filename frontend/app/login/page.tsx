@@ -1,10 +1,12 @@
 "use client"
 
+export const dynamic = "force-dynamic"
+
 import { useState, FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { api } from "@/lib/api"
-import { tokenStore } from "@/lib/auth"
+import { signInWithEmailAndPassword } from "firebase/auth"
+import { auth } from "@/lib/firebase"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -20,11 +22,17 @@ export default function LoginPage() {
     setLoading(true)
 
     try {
-      const data = await api.login(email, password)
-      tokenStore.set(data.access_token, data.refresh_token)
+      await signInWithEmailAndPassword(auth, email, password)
       router.push("/dashboard")
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed")
+      const code = (err as { code?: string }).code ?? ""
+      if (code === "auth/invalid-credential" || code === "auth/wrong-password" || code === "auth/user-not-found") {
+        setError("Invalid email or password.")
+      } else if (code === "auth/too-many-requests") {
+        setError("Too many attempts. Please try again later.")
+      } else {
+        setError(err instanceof Error ? err.message : "Login failed")
+      }
     } finally {
       setLoading(false)
     }
@@ -32,14 +40,11 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-black relative overflow-hidden">
-      {/* Background radial glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(10,132,255,0.15),transparent)] pointer-events-none" />
 
       <div className="relative w-full max-w-[400px] mx-auto px-4 animate-fade-in">
-        {/* Glass card */}
         <div className="bg-white/[0.04] backdrop-blur-xl border border-white/[0.08] rounded-2xl p-10 shadow-[0_0_0_1px_rgba(255,255,255,0.06),0_32px_80px_rgba(0,0,0,0.8)]">
 
-          {/* Logo */}
           <div className="flex items-center justify-center gap-2 mb-8">
             <span className="text-[#0A84FF] text-[28px] leading-none select-none">◆</span>
             <span className="text-white font-semibold text-[20px] tracking-tight">Forge</span>
@@ -54,9 +59,7 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-[13px] font-medium text-white/60 mb-1.5">
-                Email
-              </label>
+              <label className="block text-[13px] font-medium text-white/60 mb-1.5">Email</label>
               <input
                 type="email"
                 required
@@ -68,9 +71,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-[13px] font-medium text-white/60 mb-1.5">
-                Password
-              </label>
+              <label className="block text-[13px] font-medium text-white/60 mb-1.5">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -130,9 +131,7 @@ export default function LoginPage() {
                   </svg>
                   Signing in…
                 </>
-              ) : (
-                "Sign in"
-              )}
+              ) : "Sign in"}
             </button>
           </form>
 

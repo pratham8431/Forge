@@ -1,10 +1,13 @@
 "use client"
 
+export const dynamic = "force-dynamic"
+
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { onAuthStateChanged, signOut } from "firebase/auth"
+import { auth } from "@/lib/firebase"
 import { api } from "@/lib/api"
-import { tokenStore } from "@/lib/auth"
 import type { Session } from "@/types/auth"
 
 function formatRelativeTime(dateStr: string): string {
@@ -24,21 +27,20 @@ export default function SessionsPage() {
   const [revoking, setRevoking] = useState<string | null>(null)
 
   useEffect(() => {
-    const token = tokenStore.getAccess()
-    if (!token) { router.push("/login"); return }
-
-    api.getSessions(token)
-      .then(setSessions)
-      .catch(() => { tokenStore.clear(); router.push("/login") })
-      .finally(() => setLoading(false))
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) { router.push("/login"); return }
+      api.getSessions()
+        .then(setSessions)
+        .catch(() => router.push("/login"))
+        .finally(() => setLoading(false))
+    })
+    return () => unsubscribe()
   }, [router])
 
   async function revoke(sessionId: string) {
-    const token = tokenStore.getAccess()
-    if (!token) return
     setRevoking(sessionId)
     try {
-      await api.revokeSession(sessionId, token)
+      await api.revokeSession(sessionId)
       setSessions((s) => s.filter((x) => x.id !== sessionId))
     } catch {
       // silently ignore
@@ -48,16 +50,13 @@ export default function SessionsPage() {
   }
 
   async function revokeAll() {
-    const token = tokenStore.getAccess()
-    if (!token) return
-    await api.logoutAll(token).catch(() => null)
-    tokenStore.clear()
+    await api.logoutAll().catch(() => null)
+    await signOut(auth)
     router.push("/login")
   }
 
   return (
     <div className="min-h-screen bg-black text-white">
-      {/* Fixed Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 h-[52px] bg-black/72 backdrop-blur-2xl border-b border-white/[0.06] flex items-center px-6 gap-3">
         <Link
           href="/dashboard"
@@ -74,7 +73,6 @@ export default function SessionsPage() {
 
       <main className="max-w-[680px] mx-auto px-6 pt-[52px] pb-12">
         <div className="pt-12 animate-fade-in">
-          {/* Page header */}
           <div className="flex items-start justify-between mb-8">
             <div>
               <h1 className="text-[32px] font-semibold tracking-tight text-white leading-tight">
@@ -97,7 +95,6 @@ export default function SessionsPage() {
             </button>
           </div>
 
-          {/* Session list */}
           {loading ? (
             <div className="flex items-center gap-3 text-white/30 py-12">
               <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -123,7 +120,6 @@ export default function SessionsPage() {
                   className="bg-white/[0.04] border border-white/[0.06] rounded-2xl px-6 py-5 flex items-start justify-between gap-4"
                 >
                   <div className="flex items-start gap-4">
-                    {/* Device icon */}
                     <div className="w-11 h-11 rounded-xl bg-white/[0.06] flex items-center justify-center shrink-0 mt-0.5">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/70">
                         <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
@@ -131,7 +127,6 @@ export default function SessionsPage() {
                         <line x1="12" y1="17" x2="12" y2="21" />
                       </svg>
                     </div>
-                    {/* Session details */}
                     <div>
                       <p className="text-[16px] font-medium text-white leading-tight">
                         {s.device_name ?? <span className="text-white/40">Unknown device</span>}
@@ -148,7 +143,6 @@ export default function SessionsPage() {
                     </div>
                   </div>
 
-                  {/* Revoke button */}
                   <button
                     onClick={() => revoke(s.id)}
                     disabled={revoking === s.id}
