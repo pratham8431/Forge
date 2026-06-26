@@ -10,5 +10,13 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 }
 
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
-export const auth = getAuth(app)
+// Guard against SSR/build-time initialization — Firebase auth is browser-only.
+// All consumers call auth inside useEffect, so null during SSR is safe.
+const app =
+  typeof window !== "undefined"
+    ? getApps().length
+      ? getApps()[0]
+      : initializeApp(firebaseConfig)
+    : null
+
+export const auth = (app ? getAuth(app) : null) as ReturnType<typeof getAuth>
